@@ -1,7 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef } from "react";
 import type { Stroke } from "@/types/game";
+
+export type SharedCanvasHandle = {
+  toDataURL: () => string;
+};
 
 type Props = {
   strokes: Stroke[];
@@ -27,19 +31,16 @@ function drawSegment(
   ctx.stroke();
 }
 
-export function SharedCanvas({
-  strokes,
-  readOnly,
-  color,
-  lineWidth,
-  onStroke,
-}: Props) {
-  const ref = useRef<HTMLCanvasElement>(null);
+export const SharedCanvas = forwardRef<SharedCanvasHandle, Props>(function SharedCanvas(
+  { strokes, readOnly, color, lineWidth, onStroke },
+  ref
+) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
   const last = useRef<{ x: number; y: number } | null>(null);
 
   const paintAll = useCallback(() => {
-    const canvas = ref.current;
+    const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
@@ -59,18 +60,26 @@ export function SharedCanvas({
     }
   }, [strokes]);
 
+  useImperativeHandle(ref, () => ({
+    toDataURL: () => {
+      const canvas = canvasRef.current;
+      if (!canvas) return "";
+      return canvas.toDataURL("image/png");
+    },
+  }));
+
   useEffect(() => {
     paintAll();
   }, [paintAll]);
 
   useEffect(() => {
     const ro = new ResizeObserver(() => paintAll());
-    if (ref.current) ro.observe(ref.current);
+    if (canvasRef.current) ro.observe(canvasRef.current);
     return () => ro.disconnect();
   }, [paintAll]);
 
   const normPoint = (clientX: number, clientY: number) => {
-    const canvas = ref.current;
+    const canvas = canvasRef.current;
     if (!canvas) return { nx: 0, ny: 0 };
     const rect = canvas.getBoundingClientRect();
     const x = (clientX - rect.left) / rect.width;
@@ -108,7 +117,7 @@ export function SharedCanvas({
 
   return (
     <canvas
-      ref={ref}
+      ref={canvasRef}
       className="w-full max-w-3xl aspect-[4/3] touch-none rounded-xl border border-slate-700 bg-[#0d1117] shadow-lg cursor-crosshair"
       onMouseDown={(e) => start(e.clientX, e.clientY)}
       onMouseMove={(e) => move(e.clientX, e.clientY)}
@@ -127,4 +136,4 @@ export function SharedCanvas({
       onTouchEnd={end}
     />
   );
-}
+});
